@@ -1,5 +1,6 @@
 package solution;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
@@ -21,8 +22,12 @@ public class StoryTesterImpl implements StoryTester {
 	
 	@Override
 	public void testOnHirarchy(String story, Class<?> testClass) throws Exception {
-
-		initLocalVars(story, testClass);
+		initLocalStory(story);
+		MakeTestClassInstance(testClass);
+		run(testClass);
+	}
+	
+	private void run(Class<?> testClass) throws StoryTestExceptionImpl, WordNotFoundException{
 		while(true){
 			String step = getNexStoryStep();
 			if(step.equals("EOF")) break;
@@ -33,9 +38,10 @@ public class StoryTesterImpl implements StoryTester {
 	@Override
 	public void testOnNested(String story, Class<?> testClass) throws Exception {
 
+		initLocalStory(story);
 		String firstGivenStep = getFirstStoryStep(story);
 		Class<?> nestedClass = findNestedClassWithFirstGiven(firstGivenStep,testClass);
-		testOnHirarchy(story,nestedClass);
+		run(nestedClass);
 	}
 	
 	// CORE FUNCTIONS 
@@ -96,6 +102,7 @@ public class StoryTesterImpl implements StoryTester {
 
 	private Class<?> findNestedClassWithFirstGiven(String givenStep, Class<?> testClass) throws WordNotFoundException {
 		Class<?> currClass = testClass;
+		MakeTestClassInstance(testClass);
 		while(true){
 			try{
 				findAnnotatedMethodInHirarchy(givenStep,currClass);
@@ -104,8 +111,22 @@ public class StoryTesterImpl implements StoryTester {
 				Class<?>[] currClassInnerClass = currClass.getDeclaredClasses();
 				if(currClassInnerClass.length < 1)
 					throw e;
-				else
+				else{
+					Class<?> outer = currClass;
 					currClass = currClassInnerClass[0];
+					
+					Constructor<?> ctor = null;
+					try {
+						ctor = currClass.getDeclaredConstructor(outer);
+						Object innerInstance = ctor.newInstance(mTestClassInstance);
+						mTestClassInstance = innerInstance;
+					
+					} catch (InstantiationException | IllegalAccessException
+							| IllegalArgumentException | InvocationTargetException | 
+							NoSuchMethodException | SecurityException e1) {
+						e1.printStackTrace();
+					}
+				}
 			}
 		}
 	}
@@ -125,6 +146,7 @@ public class StoryTesterImpl implements StoryTester {
 		
 		// if this method fails to find method the correct exception will be thrown
 		Method m = findAnnotatedMethodInHirarchy(step,testClass);
+		
 		try{
 			String s = getParamFromStep(step);
 			
@@ -146,14 +168,7 @@ public class StoryTesterImpl implements StoryTester {
 	// SMALL AUXILARY FUNCTIONS
 	/////////////////////////////////////////////////////////////////////////
 		
-		/**
-	 * responsible for initializing of the local vars
-	 * according to the params passed to the functions.
-	 * @param story
-	 * @param testClass
-	 */
-	private void initLocalVars(String story, Class<?> testClass){
-		MakeTestClassInstance(testClass);
+	private void initLocalStory(String story){
 		mStory = story;
 	}
 	
